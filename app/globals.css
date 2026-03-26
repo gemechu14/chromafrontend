@@ -1,0 +1,150 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 199 91% 60%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 214 32% 91%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 160 84% 39%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 222 47% 11%;
+    --sidebar-foreground: 213 31% 85%;
+    --sidebar-primary: 221 83% 65%;
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 222 40% 18%;
+    --sidebar-accent-foreground: 213 31% 90%;
+    --sidebar-border: 222 35% 20%;
+    --sidebar-ring: 221 83% 53%;
+
+    --success: 160 84% 39%;
+    --warning: 38 92% 50%;
+
+    --font-display: 'Plus Jakarta Sans', sans-serif;
+    --font-body: 'Inter', sans-serif;
+  }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 213 31% 91%;
+    --card: 222 40% 12%;
+    --card-foreground: 213 31% 91%;
+    --popover: 222 40% 12%;
+    --popover-foreground: 213 31% 91%;
+    --primary: 221 83% 60%;
+    --primary-foreground: 222 47% 8%;
+    --secondary: 199 80% 50%;
+    --secondary-foreground: 222 47% 8%;
+    --muted: 222 35% 18%;
+    --muted-foreground: 215 20% 55%;
+    --accent: 160 70% 40%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 222 35% 20%;
+    --input: 222 35% 20%;
+    --ring: 221 83% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(221 83% 53%) 0%, hsl(199 91% 60%) 100%);
+  }
+  .gradient-accent {
+    background: linear-gradient(135deg, hsl(221 83% 53%) 0%, hsl(160 84% 39%) 100%);
+  }
+  .shadow-primary {
+    box-shadow: 0 4px 20px -4px hsl(221 83% 53% / 0.35);
+  }
+  .shadow-card {
+    box-shadow: 0 4px 16px -2px hsl(222 47% 11% / 0.06), 0 2px 4px -2px hsl(222 47% 11% / 0.04);
+  }
+  .shadow-elegant {
+    box-shadow: 0 1px 3px 0 hsl(222 47% 11% / 0.06), 0 1px 2px -1px hsl(222 47% 11% / 0.06);
+  }
+}
+
+/* Toast styling */
+@layer components {
+  /* Success toast - green */
+  [data-sonner-toast][data-type="success"] {
+    @apply bg-emerald-50 text-emerald-800 border-emerald-200;
+  }
+  [data-sonner-toast][data-type="success"] [data-description] {
+    @apply text-emerald-700;
+  }
+
+  /* Error toast - red */
+  [data-sonner-toast][data-type="error"] {
+    @apply bg-red-50 text-red-800 border-red-200;
+  }
+  [data-sonner-toast][data-type="error"] [data-description] {
+    @apply text-red-700;
+  }
+
+  /* Toast container - ensure proper positioning and padding for close button */
+  [data-sonner-toast] {
+    @apply relative pr-10;
+  }
+
+  /* Close button styling - positioned top-right, inside toast */
+  [data-sonner-toast] [data-close-button] {
+    position: absolute !important;
+    top: 0.5rem !important;
+    right: 0.5rem !important;
+    left: auto !important;
+    margin: 0 !important;
+    @apply bg-transparent text-foreground/50 hover:text-foreground hover:bg-foreground/10 border-0 rounded-md transition-colors opacity-70 hover:opacity-100 p-1.5 w-6 h-6 flex items-center justify-center;
+  }
+  [data-sonner-toast][data-type="success"] [data-close-button] {
+    @apply text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100;
+  }
+  [data-sonner-toast][data-type="error"] [data-close-button] {
+    @apply text-red-700 hover:text-red-900 hover:bg-red-100;
+  }
+}
+
+
+
