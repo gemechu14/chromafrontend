@@ -41,10 +41,12 @@ function CustomerHistorySidebar({
   customerId,
   tenantProducts,
   globalProductLookup,
+  onSelectFormula,
 }: {
   customerId: string;
   tenantProducts: TenantProduct[];
   globalProductLookup: Record<string, { name: string; code: string }>;
+  onSelectFormula: (formula: Formula) => void;
 }) {
   const { data, isLoading } = useQuery({
     queryKey: ["formulas", "customer", customerId],
@@ -84,7 +86,12 @@ function CustomerHistorySidebar({
           0
         );
         return (
-          <div key={f.id} className="p-3 rounded-lg bg-muted/40 space-y-1">
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => onSelectFormula(f)}
+            className="w-full text-left p-3 rounded-lg bg-muted/40 space-y-1 hover:bg-muted/60 transition-colors border border-transparent hover:border-border/60"
+          >
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">
                 {f.formula_name ?? f.service_type ?? "Formula"}
@@ -106,7 +113,7 @@ function CustomerHistorySidebar({
             {cost > 0 && (
               <p className="text-xs font-medium text-primary">${cost.toFixed(2)}</p>
             )}
-          </div>
+          </button>
         );
       })}
     </div>
@@ -365,6 +372,18 @@ export default function FormulaBuilder() {
     saveMutation.mutate();
   }
 
+  function handleSelectPastFormula(formula: Formula) {
+    setFormulaName(formula.formula_name ?? "");
+    setServiceType(formula.service_type ?? "");
+    setNotes(formula.notes ?? "");
+    const loadedItems = formula.formula_items.map((fi) => ({
+      tenantProductId: fi.tenant_product_id,
+      amount: fi.amount_used > 0 ? String(fi.amount_used) : "",
+    }));
+    setMixItems(loadedItems.length > 0 ? loadedItems : [{ tenantProductId: "", amount: "" }]);
+    toast.success("Loaded formula from history.");
+  }
+
   return (
     <div className="space-y-6 w-full">
       <div>
@@ -374,9 +393,9 @@ export default function FormulaBuilder() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Main builder */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="lg:col-span-2 space-y-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-1">
           {/* Client & Service */}
           <Card className="shadow-card border-border/60">
             <CardHeader>
@@ -589,7 +608,7 @@ export default function FormulaBuilder() {
         </div>
 
         {/* Right Sidebar - Color Preview & History */}
-        <div className="space-y-4">
+        <div className="space-y-4 lg:sticky lg:top-24 lg:self-start lg:z-10">
           {/* Real-time Color Preview */}
           <Card className="shadow-card border-border/60">
             <CardHeader>
@@ -634,7 +653,7 @@ export default function FormulaBuilder() {
             <CardHeader>
               <CardTitle className="font-display text-lg">Past Formulas</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="lg:max-h-[50vh] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
               {!selectedCustomer ? (
                 <p className="text-sm text-muted-foreground">
                   Select a customer to see history
@@ -644,6 +663,7 @@ export default function FormulaBuilder() {
                   customerId={selectedCustomer}
                   tenantProducts={tenantProducts}
                   globalProductLookup={globalProductLookup}
+                  onSelectFormula={handleSelectPastFormula}
                 />
               )}
             </CardContent>
