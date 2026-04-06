@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/auth-context";
 import { ApiRequestError } from "@/lib/api/client";
 import { isPlatformSuperAdmin } from "@/lib/auth-roles";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 
 const highlights = [
   "Track every gram of color used",
@@ -151,6 +152,19 @@ export default function LoginPage() {
             <p className="text-slate-500">Sign in to your salon dashboard</p>
           </div>
 
+          <GoogleSignInButton label="Sign in with Google" disabled={loading} />
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-slate-200" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-white px-3 text-slate-400 font-medium uppercase tracking-wide">
+                or continue with email
+              </span>
+            </div>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Error banner */}
             {error && (
@@ -180,7 +194,7 @@ export default function LoginPage() {
                 <Label htmlFor="password" className="text-sm font-medium">
                   Password
                 </Label>
-                <Link href="#" className="text-xs text-primary hover:underline">
+                <Link href="/forgot-password" className="text-xs text-[#6C3FC5] hover:underline font-medium">
                   Forgot password?
                 </Link>
               </div>

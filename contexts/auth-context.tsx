@@ -15,6 +15,8 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<User>;
+  /** Step B — after Google redirects with ?code=&state= */
+  loginWithGoogleOAuth: (code: string, state: string) => Promise<User>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -60,6 +62,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return loggedInUser;
   }, []);
 
+  const loginWithGoogleOAuth = useCallback(async (code: string, state: string) => {
+    const { user: loggedInUser } = await authApi.exchangeGoogleOAuthCallback(code, state);
+    setUser(loggedInUser);
+    return loggedInUser;
+  }, []);
+
   const logout = useCallback(() => {
     authApi.logout();
     setUser(null);
@@ -85,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
+        loginWithGoogleOAuth,
         logout,
         refreshUser,
       }}

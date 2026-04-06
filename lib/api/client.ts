@@ -1,13 +1,26 @@
 /**
  * Base API client for Chroma SaaS.
  *
- * - Reads the base URL from NEXT_PUBLIC_API_BASE_URL
+ * - Reads the base URL from NEXT_PUBLIC_API_URL or NEXT_PUBLIC_API_BASE_URL
  * - Injects Authorization header automatically
  * - Handles token refresh on 401 responses
  * - Throws ApiRequestError with the backend's detail message
  */
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
+function resolvePublicApiBaseUrl(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_API_URL?.trim() ||
+    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
+    "";
+  return (raw || "http://localhost:8000/api/v1").replace(/\/$/, "");
+}
+
+const BASE_URL = resolvePublicApiBaseUrl();
+
+/** Backend API root including `/api/v1` (for browser fetch, OAuth config, etc.). */
+export function getApiBaseUrl(): string {
+  return BASE_URL;
+}
 
 // ─── Storage helpers (safe for SSR) ──────────────────────────────────────────
 

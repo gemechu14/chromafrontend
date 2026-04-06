@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { tenantsApi } from "@/lib/api/tenants";
 import { ApiRequestError } from "@/lib/api/client";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 
 interface RegisterForm {
   tenant_name: string;
@@ -281,6 +282,19 @@ export default function RegisterPage() {
                 <p className="text-slate-500 text-sm">
                   You&apos;ll use these credentials to sign in.
                 </p>
+              </div>
+
+              <GoogleSignInButton label="Sign up with Google" disabled={loading} />
+
+              <div className="relative my-2">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-slate-200" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-white px-3 text-slate-400 font-medium uppercase tracking-wide">
+                    or register with email
+                  </span>
+                </div>
               </div>
 
               <div className="space-y-2">

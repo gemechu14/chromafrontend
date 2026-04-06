@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { FlaskConical, Plus, Trash2, Save, User, Loader2, Eye } from "lucide-react";
@@ -22,6 +22,7 @@ import { customersApi } from "@/lib/api/customers";
 import { tenantsApi } from "@/lib/api/tenants";
 import { productsApi } from "@/lib/api/products";
 import { formulasApi } from "@/lib/api/formulas";
+import { inventoryApi } from "@/lib/api/inventory";
 import { useAuth } from "@/contexts/auth-context";
 import type { Formula, TenantProduct } from "@/lib/types";
 import { ApiRequestError } from "@/lib/api/client";
@@ -133,9 +134,8 @@ export default function FormulaBuilder() {
   const [mixItems, setMixItems] = useState<MixItem[]>([
     { tenantProductId: "", amount: "" },
   ]);
-  const [selectedLocationId, setSelectedLocationId] = useState("");
 
-  // ── Fetch locations (formula needs a location_id; default_location may be unset) ──
+  // ── Locations: formula always uses the user's default location (read-only in UI) ──
   const { data: locationsPage, isLoading: loadingLocations } = useQuery({
     queryKey: ["locations", user?.tenant_id, "formula-builder"],
     queryFn: () => tenantsApi.listLocations(user!.tenant_id),
@@ -143,17 +143,28 @@ export default function FormulaBuilder() {
   });
   const locations = locationsPage?.items ?? [];
 
-  useEffect(() => {
-    if (!user || locations.length === 0) return;
-    setSelectedLocationId((prev) => {
-      if (prev && locations.some((l) => l.id === prev)) return prev;
-      if (user.default_location_id && locations.some((l) => l.id === user.default_location_id)) {
-        return user.default_location_id;
-      }
-      if (locations.length === 1) return locations[0].id;
-      return "";
-    });
-  }, [user?.id, user?.default_location_id, locations]);
+  const formulaLocationId = (() => {
+    if (!user || locations.length === 0) return "";
+    if (user.default_location_id && locations.some((l) => l.id === user.default_location_id)) {
+      return user.default_location_id;
+    }
+    if (locations.length === 1) return locations[0].id;
+    return "";
+  })();
+
+  const formulaLocationName =
+    (formulaLocationId && locations.find((l) => l.id === formulaLocationId)?.name) ?? "";
+
+  // ── Inventory at default location (for product dropdown: in stock only) ─────────
+  const { data: inventoryItems = [], isLoading: loadingInventory } = useQuery({
+    queryKey: ["inventory", "items", formulaLocationId, "formula-builder"],
+    queryFn: () => inventoryApi.listItems(formulaLocationId),
+    enabled: !!formulaLocationId,
+  });
+
+  const tenantProductIdsInStock = new Set(
+    inventoryItems.filter((inv) => inv.on_hand_qty > 0).map((inv) => inv.tenant_product_id)
+  );
 
   // ── Fetch customers ─────────────────────────────────────────────────────────
   const { data: customersPage, isLoading: loadingCustomers } = useQuery({
@@ -223,7 +234,22 @@ export default function FormulaBuilder() {
     };
   });
 
-  const loadingProducts = loadingTenantProducts || loadingGlobalProducts;
+  const loadingProducts = loadingTenantProducts || loadingGlobalProducts || loadingInventory;
+
+  function mixProductLabel(p: TenantProduct): string {
+    if (p.custom_name?.trim()) return p.custom_name;
+    const gp = globalProductLookup[p.product_id];
+    return gp ? `${gp.name} (${gp.code})` : p.product_id || `Product ${p.id.slice(0, 8)}`;
+  }
+
+  function mixProductsForRow(selectedTenantProductId: string): TenantProduct[] {
+    const inStock = tenantProducts.filter((p) => tenantProductIdsInStock.has(p.id));
+    if (selectedTenantProductId && !inStock.some((p) => p.id === selectedTenantProductId)) {
+      const extra = tenantProducts.find((p) => p.id === selectedTenantProductId);
+      if (extra) return [extra, ...inStock];
+    }
+    return inStock;
+  }
 
   // ── Mix item helpers ─────────────────────────────────────────────────────────
   const addItem = () =>
@@ -275,12 +301,12 @@ export default function FormulaBuilder() {
   const saveMutation = useMutation({
     mutationFn: () => {
       if (!user) throw new Error("Not authenticated.");
-      const locationId = selectedLocationId || user.default_location_id || "";
+      const locationId = formulaLocationId;
       if (!locationId) {
         throw new Error(
           locations.length === 0
             ? "No salon locations found. Add a location first."
-            : "Select a location for this formula."
+            : "Set your default location (Team) or ensure this salon has exactly one location."
         );
       }
 
@@ -353,12 +379,12 @@ export default function FormulaBuilder() {
       toast.error("Please select a customer.");
       return;
     }
-    const locationId = selectedLocationId || user?.default_location_id;
+    const locationId = formulaLocationId;
     if (!locationId) {
       toast.error(
         locations.length === 0
           ? "Add a salon location before saving formulas."
-          : "Select a location for this formula."
+          : "Set your default location under Team before saving formulas."
       );
       return;
     }
@@ -448,19 +474,16 @@ export default function FormulaBuilder() {
                     No locations for this salon. Add one under{" "}
                     <span className="font-medium">Locations</span> first.
                   </p>
+                ) : !formulaLocationId ? (
+                  <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                    Set your default location under <span className="font-medium">Team</span> to build
+                    formulas. This formula uses your default location only.
+                  </p>
                 ) : (
-                  <Select value={selectedLocationId || undefined} onValueChange={setSelectedLocationId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select location" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {locations.map((loc) => (
-                        <SelectItem key={loc.id} value={loc.id}>
-                          {loc.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <p className="text-sm rounded-md border border-border bg-muted/30 px-3 py-2.5 text-foreground">
+                    <span className="text-muted-foreground"></span>{" "}
+                    <span className="font-medium">{formulaLocationName}</span>
+                  </p>
                 )}
               </div>
               <div>
@@ -484,6 +507,7 @@ export default function FormulaBuilder() {
               <AnimatePresence>
                 {mixItems.map((item, i) => {
                   const tp = tenantProducts.find((p) => p.id === item.tenantProductId);
+                  const rowProducts = mixProductsForRow(item.tenantProductId);
                   return (
                     <motion.div
                       key={i}
@@ -511,17 +535,17 @@ export default function FormulaBuilder() {
                               <SelectItem value="__none__" disabled>
                                 {loadingProducts ? "Loading products..." : "No products in catalog"}
                               </SelectItem>
+                            ) : rowProducts.length === 0 ? (
+                              <SelectItem value="__none__" disabled>
+                                No products in stock at this location
+                              </SelectItem>
                             ) : (
-                              tenantProducts.map((p) => {
-                                // Use custom_name if it exists and is not empty, otherwise fall back to global product
-                                const name = (p.custom_name && p.custom_name.trim())
-                                  ? p.custom_name
-                                  : (globalProductLookup[p.product_id]
-                                    ? `${globalProductLookup[p.product_id].name} (${globalProductLookup[p.product_id].code})`
-                                    : p.product_id || `Product ${p.id.slice(0, 8)}`);
+                              rowProducts.map((p) => {
+                                const inStock = tenantProductIdsInStock.has(p.id);
+                                const name = mixProductLabel(p);
                                 return (
-                                  <SelectItem key={p.id} value={p.id}>
-                                    {name}
+                                  <SelectItem key={p.id} value={p.id} disabled={!inStock}>
+                                    {!inStock ? `${name} (not in stock)` : name}
                                   </SelectItem>
                                 );
                               })

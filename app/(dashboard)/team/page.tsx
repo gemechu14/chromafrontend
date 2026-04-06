@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,6 +15,8 @@ import {
   ToggleLeft,
   ToggleRight,
   MapPin,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -68,6 +70,22 @@ const defaultCreateForm: CreateUserForm = {
   role: "EMPLOYEE",
   default_location_id: "",
 };
+
+/** Prefers the logged-in user's default location; otherwise first tenant location. */
+function initialCreateForm(
+  current: AppUser | null | undefined,
+  locs: Location[]
+): CreateUserForm {
+  const uid = current?.default_location_id ?? null;
+  const ids = new Set(locs.map((l) => l.id));
+  let default_location_id = "";
+  if (uid && ids.has(uid)) {
+    default_location_id = uid;
+  } else if (locs.length > 0) {
+    default_location_id = locs[0].id;
+  }
+  return { ...defaultCreateForm, default_location_id };
+}
 
 // ─── Role badge ───────────────────────────────────────────────────────────────
 
@@ -123,6 +141,7 @@ export default function TeamPage() {
     default_location_id: "",
   });
   const [formError, setFormError] = useState<string | null>(null);
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
 
   // ── Fetch users ─────────────────────────────────────────────────────────────
   const { data: usersPage, isLoading } = useQuery({
@@ -137,17 +156,32 @@ export default function TeamPage() {
     queryFn: () => tenantsApi.listLocations(currentUser!.tenant_id),
     enabled: !!currentUser?.tenant_id,
   });
-  const locations: Location[] = locationsPage?.items ?? [];
+  const locations: Location[] = useMemo(
+    () => locationsPage?.items ?? [],
+    [locationsPage]
+  );
+
+  // If locations load after the dialog opens, apply logged-in user's location (or first location).
+  useEffect(() => {
+    if (!showCreate || locations.length === 0) return;
+    setCreateForm((f) => {
+      const valid = locations.some((l) => l.id === f.default_location_id);
+      if (valid) return f;
+      const next = initialCreateForm(currentUser, locations);
+      return { ...f, default_location_id: next.default_location_id };
+    });
+  }, [showCreate, locations, currentUser]);
 
   // ── Create user ─────────────────────────────────────────────────────────────
   const createMutation = useMutation({
     mutationFn: () => {
       if (!currentUser) throw new Error("Not authenticated.");
+      const pw = createForm.password.trim();
       return usersApi.create({
         tenant_id: currentUser.tenant_id,
         full_name: createForm.full_name,
         email: createForm.email,
-        password: createForm.password,
+        password: pw === "" ? null : pw,
         role: createForm.role,
         default_location_id: createForm.default_location_id || null,
       });
@@ -155,7 +189,8 @@ export default function TeamPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setShowCreate(false);
-      setCreateForm(defaultCreateForm);
+      setCreateForm(initialCreateForm(currentUser, locations));
+      setShowCreatePassword(false);
       toast.success("Team member added successfully.");
     },
     onError: (err) => {
@@ -239,8 +274,9 @@ export default function TeamPage() {
           <Button
             className="bg-primary text-white hover:bg-primary/90 rounded-full gap-2 font-semibold"
             onClick={() => {
-              setCreateForm(defaultCreateForm);
+              setCreateForm(initialCreateForm(currentUser, locations));
               setFormError(null);
+              setShowCreatePassword(false);
               setShowCreate(true);
             }}
           >
@@ -433,17 +469,33 @@ export default function TeamPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>
-                Password <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                type="password"
-                placeholder="Minimum 8 characters"
-                value={createForm.password}
-                onChange={(e) =>
-                  setCreateForm((f) => ({ ...f, password: e.target.value }))
-                }
-              />
+              <Label>Password</Label>
+              <div className="relative">
+                <Input
+                  type={showCreatePassword ? "text" : "password"}
+                  placeholder="Minimum 8 characters"
+                  value={createForm.password}
+                  onChange={(e) =>
+                    setCreateForm((f) => ({ ...f, password: e.target.value }))
+                  }
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCreatePassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-foreground transition-colors"
+                  aria-label={showCreatePassword ? "Hide password" : "Show password"}
+                >
+                  {showCreatePassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Leave empty to send an email invitation.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -466,24 +518,29 @@ export default function TeamPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Default Location</Label>
-                <Select
-                  value={createForm.default_location_id || "__none__"}
-                  onValueChange={(v) =>
-                    setCreateForm((f) => ({ ...f, default_location_id: v === "__none__" ? "" : v }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="None" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {locations.map((l) => (
-                      <SelectItem key={l.id} value={l.id}>
-                        {l.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {locations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    No locations available yet.
+                  </p>
+                ) : (
+                  <Select
+                    value={createForm.default_location_id}
+                    onValueChange={(v) =>
+                      setCreateForm((f) => ({ ...f, default_location_id: v }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {locations.map((l) => (
+                        <SelectItem key={l.id} value={l.id}>
+                          {l.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
           </div>
@@ -500,8 +557,13 @@ export default function TeamPage() {
             <Button
               onClick={() => {
                 setFormError(null);
-                if (!createForm.full_name || !createForm.email || !createForm.password) {
-                  setFormError("Full name, email, and password are required.");
+                if (!createForm.full_name || !createForm.email) {
+                  setFormError("Full name and email are required.");
+                  return;
+                }
+                const pw = createForm.password.trim();
+                if (pw !== "" && pw.length < 8) {
+                  setFormError("Password must be at least 8 characters.");
                   return;
                 }
                 createMutation.mutate();

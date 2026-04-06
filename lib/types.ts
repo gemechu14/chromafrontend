@@ -13,8 +13,20 @@ export interface PaginatedResponse<T> {
 export interface TokenResponse {
   access_token: string;
   refresh_token: string;
-  token_type: "bearer";
+  token_type: string;
 }
+
+/** Embedded user in login / refresh / Google OAuth responses. */
+export interface LoginUserSummary {
+  id: string;
+  email: string;
+  full_name: string;
+  role: string;
+  tenant_id: string;
+  is_platform_tenant: boolean;
+}
+
+export type AuthProvider = "local" | "google";
 
 export interface LoginRequest {
   email: string;
@@ -29,30 +41,35 @@ export interface RefreshRequest {
 
 export type UserRole = "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "EMPLOYEE";
 
-export interface User {
+export interface UserRead {
   id: string;
   tenant_id: string;
   full_name: string;
   email: string;
   role: UserRole;
-  /** True when the user belongs to the platform tenant (SaaS operators). */
-  is_platform_tenant?: boolean;
   is_active: boolean;
   default_location_id: string | null;
+  auth_provider: AuthProvider;
   last_login_at: string | null;
   created_at: string;
 }
 
+export interface User extends UserRead {
+  /** True when the user belongs to the platform tenant (SaaS operators). */
+  is_platform_tenant?: boolean;
+}
+
 /** Response from POST /users/login (may include embedded user for routing). */
 export interface LoginResponse extends TokenResponse {
-  user?: User;
+  user?: User | LoginUserSummary;
 }
 
 export interface CreateUserRequest {
   tenant_id: string;
   full_name: string;
   email: string;
-  password: string;
+  /** Omit or null to send an email invitation instead of setting a password immediately. */
+  password?: string | null;
   role?: UserRole;
   is_active?: boolean;
   default_location_id?: string | null;
