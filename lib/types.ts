@@ -196,6 +196,30 @@ export interface ListCustomersParams {
 
 export type ProductCategory = "COLOR" | "DEVELOPER" | "TONER" | "TREATMENT";
 export type PackSizeUnit = "G" | "ML";
+export type ToneFamilyCode = "N" | "A" | "G" | "V" | "R" | "C" | "M" | "H" | "B" | "P" | "T";
+export type ColorFamily = "NEUTRAL" | "COOL" | "WARM" | "RED" | "SPECIAL";
+
+export const TONE_FAMILY_LABELS: Record<ToneFamilyCode, string> = {
+  N: "Neutral",
+  A: "Ash",
+  G: "Gold",
+  V: "Violet",
+  R: "Red",
+  C: "Copper",
+  M: "Mahogany",
+  H: "Highlight",
+  B: "Blue",
+  P: "Pearl",
+  T: "Titanium",
+};
+
+export const COLOR_FAMILY_LABELS: Record<ColorFamily, string> = {
+  NEUTRAL: "Neutral",
+  COOL: "Cool",
+  WARM: "Warm",
+  RED: "Red",
+  SPECIAL: "Special",
+};
 
 export interface Brand {
   id: string;
@@ -239,7 +263,10 @@ export interface Product {
   sku?: string | null;
   code: string;
   name: string;
-  tone_family?: string | null;
+  tone_family?: ToneFamilyCode | null;
+  level?: number | null;
+  color_family?: ColorFamily | null;
+  hex_code?: string | null;
   pack_size_value: number;
   pack_size_unit: PackSizeUnit;
   is_active: boolean;
@@ -251,9 +278,25 @@ export interface CreateProductRequest {
   sku?: string;
   code: string;
   name: string;
-  tone_family?: string;
+  tone_family?: ToneFamilyCode | null;
+  level?: number | null;
+  color_family?: ColorFamily | null;
+  hex_code?: string | null;
   pack_size_value: number;
   pack_size_unit: PackSizeUnit;
+  is_active?: boolean;
+}
+
+export interface UpdateProductRequest {
+  sku?: string | null;
+  code?: string;
+  name?: string;
+  tone_family?: ToneFamilyCode | null;
+  level?: number | null;
+  color_family?: ColorFamily | null;
+  hex_code?: string | null;
+  pack_size_value?: number;
+  pack_size_unit?: PackSizeUnit;
   is_active?: boolean;
 }
 
@@ -264,6 +307,9 @@ export interface TenantProduct {
   custom_name?: string | null;
   is_enabled: boolean;
   tracking_unit: PackSizeUnit;
+  /** Retail / supplier pack size (e.g. tube size) in grams or milliliters. */
+  pack_size_value?: number | null;
+  pack_size_unit?: PackSizeUnit | null;
   default_unit_cost?: number | null;
   currency?: string | null;
   created_at: string;
@@ -275,6 +321,8 @@ export interface AddTenantProductRequest {
   custom_name?: string;
   is_enabled?: boolean;
   tracking_unit?: PackSizeUnit;
+  pack_size_value?: number;
+  pack_size_unit?: PackSizeUnit;
   default_unit_cost?: number;
   currency?: string;
 }
@@ -283,12 +331,17 @@ export interface UpdateTenantProductRequest {
   custom_name?: string;
   is_enabled?: boolean;
   tracking_unit?: PackSizeUnit;
+  pack_size_value?: number;
+  pack_size_unit?: PackSizeUnit;
   default_unit_cost?: number;
   currency?: string;
 }
 
 export interface ListProductsParams {
   product_line_id?: string;
+  tone_family?: ToneFamilyCode;
+  level?: number;
+  color_family?: ColorFamily;
   page?: number;
   page_size?: number;
 }

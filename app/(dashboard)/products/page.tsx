@@ -54,6 +54,7 @@ import type {
 interface EditCatalogForm {
   custom_name: string;
   tracking_unit: PackSizeUnit;
+  pack_size_value: string;
   default_unit_cost: string;
   currency: string;
   is_enabled: boolean;
@@ -62,6 +63,7 @@ interface EditCatalogForm {
 interface AddToCatalogForm {
   custom_name: string;
   tracking_unit: PackSizeUnit;
+  pack_size_value: string;
   default_unit_cost: string;
   currency: string;
 }
@@ -69,6 +71,7 @@ interface AddToCatalogForm {
 const defaultEditForm: EditCatalogForm = {
   custom_name: "",
   tracking_unit: "G",
+  pack_size_value: "",
   default_unit_cost: "",
   currency: "USD",
   is_enabled: true,
@@ -77,9 +80,14 @@ const defaultEditForm: EditCatalogForm = {
 const defaultAddForm: AddToCatalogForm = {
   custom_name: "",
   tracking_unit: "G",
+  pack_size_value: "",
   default_unit_cost: "",
   currency: "USD",
 };
+
+function costUnitLabel(unit: PackSizeUnit): "g" | "ml" {
+  return unit === "G" ? "g" : "ml";
+}
 
 // ─── My Catalog Tab ───────────────────────────────────────────────────────────
 
@@ -121,11 +129,16 @@ function MyCatalogTab({ canEdit }: { canEdit: boolean }) {
   });
   
   // Build global product lookup map
-  const globalLookup: Record<string, { name: string; code: string }> = {};
+  const globalLookup: Record<
+    string,
+    { name: string; code: string; pack_size_value: number; pack_size_unit: PackSizeUnit }
+  > = {};
   globalProductsPage?.items.forEach((gp) => {
     globalLookup[gp.id] = {
       name: gp.name,
       code: gp.code,
+      pack_size_value: gp.pack_size_value,
+      pack_size_unit: gp.pack_size_unit,
     };
   });
 
@@ -145,6 +158,18 @@ function MyCatalogTab({ canEdit }: { canEdit: boolean }) {
     resolveDisplayName(tp).toLowerCase().includes(search.toLowerCase())
   );
 
+  function formatPackDisplay(tp: TenantProduct): string | null {
+    const unit = tp.pack_size_unit ?? tp.tracking_unit;
+    if (tp.pack_size_value != null && unit) {
+      return `${tp.pack_size_value}${unit.toLowerCase()}`;
+    }
+    const gp = globalLookup[tp.product_id];
+    if (gp) {
+      return `${gp.pack_size_value}${gp.pack_size_unit.toLowerCase()}`;
+    }
+    return null;
+  }
+
   // ── Toggle enable/disable ──────────────────────────────────────────────────
   const toggleMutation = useMutation({
     mutationFn: (tp: TenantProduct) =>
@@ -160,12 +185,14 @@ function MyCatalogTab({ canEdit }: { canEdit: boolean }) {
   const updateMutation = useMutation({
     mutationFn: () => {
       if (!editingTp) throw new Error("No product selected.");
+      const cost = parseFloat(editForm.default_unit_cost);
+      const pack = parseFloat(editForm.pack_size_value);
       return productsApi.updateTenantProduct(editingTp.id, {
         custom_name: editForm.custom_name || undefined,
         tracking_unit: editForm.tracking_unit,
-        default_unit_cost: editForm.default_unit_cost
-          ? parseFloat(editForm.default_unit_cost)
-          : undefined,
+        pack_size_value: pack,
+        pack_size_unit: editForm.tracking_unit,
+        default_unit_cost: cost,
         currency: editForm.currency || undefined,
         is_enabled: editForm.is_enabled,
       });
@@ -195,9 +222,17 @@ function MyCatalogTab({ canEdit }: { canEdit: boolean }) {
   function openEdit(tp: TenantProduct) {
     setEditingTp(tp);
     setFormError(null);
+    const gp = globalLookup[tp.product_id];
+    const packVal =
+      tp.pack_size_value != null && tp.pack_size_value !== undefined
+        ? String(tp.pack_size_value)
+        : gp
+          ? String(gp.pack_size_value)
+          : "";
     setEditForm({
       custom_name: tp.custom_name ?? "",
       tracking_unit: tp.tracking_unit,
+      pack_size_value: packVal,
       default_unit_cost: tp.default_unit_cost?.toString() ?? "",
       currency: tp.currency ?? "USD",
       is_enabled: tp.is_enabled,
@@ -244,6 +279,7 @@ function MyCatalogTab({ canEdit }: { canEdit: boolean }) {
         >
           {filtered.map((tp) => {
             const displayName = resolveDisplayName(tp);
+            const packStr = formatPackDisplay(tp);
             return (
               <Card
                 key={tp.id}
@@ -268,11 +304,12 @@ function MyCatalogTab({ canEdit }: { canEdit: boolean }) {
                     </Badge>
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 mb-3">
+                    {packStr && <span>Pack: {packStr}</span>}
                     <span>Unit: {tp.tracking_unit}</span>
                     {tp.default_unit_cost !== null && tp.default_unit_cost !== undefined ? (
                       <span>
                         Cost: {tp.currency ?? "USD"} {Number(tp.default_unit_cost).toFixed(4)}/
-                        {tp.tracking_unit.toLowerCase()}
+                        {costUnitLabel(tp.tracking_unit)}
                       </span>
                     ) : (
                       <span className="italic">No cost set</span>
@@ -373,13 +410,25 @@ function MyCatalogTab({ canEdit }: { canEdit: boolean }) {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>
-                Cost per {editForm.tracking_unit.toLowerCase()} (optional)
-              </Label>
+              <Label>Pack size ({costUnitLabel(editForm.tracking_unit)})</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="e.g. 60"
+                value={editForm.pack_size_value}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, pack_size_value: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Cost per {costUnitLabel(editForm.tracking_unit)}</Label>
               <Input
                 type="number"
                 min="0"
                 step="0.0001"
+                required
                 placeholder="e.g. 0.35"
                 value={editForm.default_unit_cost}
                 onChange={(e) =>
@@ -396,6 +445,26 @@ function MyCatalogTab({ canEdit }: { canEdit: boolean }) {
             <Button
               onClick={() => {
                 setFormError(null);
+                const cost = parseFloat(editForm.default_unit_cost.trim());
+                if (
+                  editForm.default_unit_cost.trim() === "" ||
+                  !Number.isFinite(cost) ||
+                  cost < 0
+                ) {
+                  setFormError(
+                    `Enter a valid cost per ${costUnitLabel(editForm.tracking_unit)}.`
+                  );
+                  return;
+                }
+                const pack = parseFloat(editForm.pack_size_value.trim());
+                if (
+                  editForm.pack_size_value.trim() === "" ||
+                  !Number.isFinite(pack) ||
+                  pack <= 0
+                ) {
+                  setFormError("Enter a valid pack size (greater than zero).");
+                  return;
+                }
                 updateMutation.mutate();
               }}
               disabled={updateMutation.isPending}
@@ -464,14 +533,16 @@ function BrowseTab() {
   const addMutation = useMutation({
     mutationFn: () => {
       if (!user || !addingProduct) throw new Error("Missing data.");
+      const cost = parseFloat(addForm.default_unit_cost.trim());
+      const pack = parseFloat(addForm.pack_size_value.trim());
       return productsApi.addTenantProduct({
         tenant_id: user.tenant_id,
         product_id: addingProduct.id,
         custom_name: addForm.custom_name || undefined,
         tracking_unit: addForm.tracking_unit,
-        default_unit_cost: addForm.default_unit_cost
-          ? parseFloat(addForm.default_unit_cost)
-          : undefined,
+        pack_size_value: pack,
+        pack_size_unit: addForm.tracking_unit,
+        default_unit_cost: cost,
         currency: addForm.currency || undefined,
         is_enabled: true,
       });
@@ -494,6 +565,7 @@ function BrowseTab() {
     setAddForm({
       custom_name: "",
       tracking_unit: product.pack_size_unit ?? "G",
+      pack_size_value: String(product.pack_size_value ?? ""),
       default_unit_cost: "",
       currency: "USD",
     });
@@ -687,11 +759,25 @@ function BrowseTab() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Cost per {addForm.tracking_unit.toLowerCase()} (optional)</Label>
+              <Label>Pack size ({costUnitLabel(addForm.tracking_unit)})</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="e.g. 60"
+                value={addForm.pack_size_value}
+                onChange={(e) =>
+                  setAddForm((f) => ({ ...f, pack_size_value: e.target.value }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Cost per {costUnitLabel(addForm.tracking_unit)}</Label>
               <Input
                 type="number"
                 min="0"
                 step="0.0001"
+                required
                 placeholder="e.g. 0.35"
                 value={addForm.default_unit_cost}
                 onChange={(e) =>
@@ -713,6 +799,26 @@ function BrowseTab() {
             <Button
               onClick={() => {
                 setFormError(null);
+                const cost = parseFloat(addForm.default_unit_cost.trim());
+                if (
+                  addForm.default_unit_cost.trim() === "" ||
+                  !Number.isFinite(cost) ||
+                  cost < 0
+                ) {
+                  setFormError(
+                    `Enter a valid cost per ${costUnitLabel(addForm.tracking_unit)}.`
+                  );
+                  return;
+                }
+                const pack = parseFloat(addForm.pack_size_value.trim());
+                if (
+                  addForm.pack_size_value.trim() === "" ||
+                  !Number.isFinite(pack) ||
+                  pack <= 0
+                ) {
+                  setFormError("Enter a valid pack size (greater than zero).");
+                  return;
+                }
                 addMutation.mutate();
               }}
               disabled={addMutation.isPending}

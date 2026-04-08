@@ -44,7 +44,13 @@ import { useAuth } from "@/contexts/auth-context";
 import { inventoryApi } from "@/lib/api/inventory";
 import { productsApi } from "@/lib/api/products";
 import { ApiRequestError } from "@/lib/api/client";
-import type { TenantProduct, TransactionType, Brand, ProductLine } from "@/lib/types";
+import type {
+  TenantProduct,
+  TransactionType,
+  Brand,
+  ProductLine,
+  PackSizeUnit,
+} from "@/lib/types";
 import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -60,7 +66,10 @@ interface AdjustForm {
 
 interface AddProductForm {
   tenantProductId: string;
-  onHandQty: string;
+  /** Number of packs when catalog has a pack size; stored as packs × pack size → g/ml. */
+  onHandPacks: string;
+  /** Raw g/ml when no pack size is set on the product. */
+  onHandDirect: string;
   reorderLevelQty: string;
 }
 
@@ -73,7 +82,8 @@ const defaultAdjust: AdjustForm = {
 
 const defaultAddProduct: AddProductForm = {
   tenantProductId: "",
-  onHandQty: "",
+  onHandPacks: "0",
+  onHandDirect: "",
   reorderLevelQty: "120",
 };
 
@@ -85,12 +95,15 @@ interface InventoryRow {
   onHandQty: number;
   reorderLevelQty: number;
   updatedAt: string;
-  displayName: string;  // product name
-  productCode: string;  // e.g. "09N"
+  displayName: string; // product name
+  productCode: string; // e.g. "09N"
   brandLineName: string; // e.g. "Redken · Shades EQ"
-  tone: string | null;   // e.g. "Natural" (tone_family)
+  tone: string | null; // e.g. "Natural" (tone_family)
   trackingUnit: string;
   unitCost: number | null;
+  /** e.g. 60 — used with onHandQty to show pack count */
+  packSizeValue: number | null;
+  packUnitLabel: string;
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -191,15 +204,56 @@ export default function Inventory() {
   });
   
   // Build global product lookup map
-  const globalProductLookup: Record<string, { name: string; code: string; tone_family: string | null; product_line_id: string }> = {};
+  const globalProductLookup: Record<
+    string,
+    {
+      name: string;
+      code: string;
+      tone_family: string | null;
+      product_line_id: string;
+      pack_size_value: number;
+      pack_size_unit: PackSizeUnit;
+    }
+  > = {};
   globalProductsPage?.items.forEach((gp) => {
     globalProductLookup[gp.id] = {
       name: gp.name,
       code: gp.code,
       tone_family: gp.tone_family ?? null,
       product_line_id: gp.product_line_id,
+      pack_size_value: gp.pack_size_value,
+      pack_size_unit: gp.pack_size_unit,
     };
   });
+
+  function unitLabel(u: PackSizeUnit | undefined): string {
+    return u === "ML" ? "ml" : "g";
+  }
+
+  function resolvePackSizeForTenant(
+    tp: TenantProduct | undefined
+  ): { value: number; unit: PackSizeUnit } | null {
+    if (!tp) return null;
+    const v = tp.pack_size_value;
+    const u = (tp.pack_size_unit ?? tp.tracking_unit) as PackSizeUnit;
+    if (v != null && v > 0 && u) {
+      return { value: v, unit: u };
+    }
+    const gp = globalProductLookup[tp.product_id];
+    if (gp && gp.pack_size_value > 0) {
+      return { value: gp.pack_size_value, unit: gp.pack_size_unit };
+    }
+    return null;
+  }
+
+  function formatPackCountLine(total: number, packValue: number): string {
+    if (packValue <= 0 || !Number.isFinite(total)) return "—";
+    const packs = total / packValue;
+    if (!Number.isFinite(packs)) return "—";
+    const rounded = Math.round(packs * 100) / 100;
+    const s = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, "");
+    return s;
+  }
 
   const loadingProducts = loadingTenantProducts || loadingGlobalProducts;
 
@@ -241,6 +295,7 @@ export default function Inventory() {
     if (!tp && !loadingProducts) {
       console.warn(`Tenant product not found for inventory item ${inv.id}:`, inv.tenant_product_id);
     }
+    const pack = resolvePackSizeForTenant(tp);
     return {
       itemId: inv.id,
       tenantProductId: inv.tenant_product_id,
@@ -253,6 +308,8 @@ export default function Inventory() {
       tone: resolveTone(tp),
       trackingUnit: tp?.tracking_unit?.toLowerCase() ?? "g",
       unitCost: tp?.default_unit_cost ?? null,
+      packSizeValue: pack ? pack.value : null,
+      packUnitLabel: pack ? unitLabel(pack.unit) : "g",
     };
   });
 
@@ -275,11 +332,20 @@ export default function Inventory() {
   const addItemMutation = useMutation({
     mutationFn: () => {
       if (!user || !locationId) throw new Error("No location selected.");
+      const tp = tenantProducts.find((p) => p.id === addProduct.tenantProductId);
+      const pack = resolvePackSizeForTenant(tp);
+      let onHandQty: number;
+      if (pack && pack.value > 0) {
+        const packs = parseFloat(addProduct.onHandPacks.trim());
+        onHandQty = Number.isFinite(packs) ? packs * pack.value : 0;
+      } else {
+        onHandQty = parseFloat(addProduct.onHandDirect.trim()) || 0;
+      }
       return inventoryApi.createItem({
         tenant_id: user.tenant_id,
         location_id: locationId,
         tenant_product_id: addProduct.tenantProductId,
-        on_hand_qty: parseFloat(addProduct.onHandQty) || 0,
+        on_hand_qty: onHandQty,
         reorder_level_qty: parseFloat(addProduct.reorderLevelQty) || 0,
       });
     },
@@ -329,6 +395,22 @@ export default function Inventory() {
   });
 
   const isLoading = loadingItems || loadingProducts;
+
+  const addSelectedTp = tenantProducts.find((p) => p.id === addProduct.tenantProductId);
+  const addPack = resolvePackSizeForTenant(addSelectedTp);
+  const addPacksNum = parseFloat(addProduct.onHandPacks.trim());
+  const addDirectNum = parseFloat(addProduct.onHandDirect.trim());
+  const addPreviewTotal =
+    addPack && addPack.value > 0
+      ? Number.isFinite(addPacksNum)
+        ? addPacksNum * addPack.value
+        : 0
+      : Number.isFinite(addDirectNum)
+        ? addDirectNum
+        : 0;
+  const addTu = addSelectedTp?.tracking_unit
+    ? unitLabel(addSelectedTp.tracking_unit as PackSizeUnit)
+    : "g";
 
   // ── No location configured ──────────────────────────────────────────────────
   if (!locationId && !isLoading) {
@@ -469,7 +551,13 @@ export default function Inventory() {
                   <TableHead className="font-semibold text-foreground">Product</TableHead>
                   <TableHead className="font-semibold text-foreground hidden md:table-cell">Brand / Line</TableHead>
                   <TableHead className="font-semibold text-foreground hidden lg:table-cell">Tone</TableHead>
-                  <TableHead className="text-right font-semibold text-foreground">On Hand</TableHead>
+                  <TableHead className="text-right font-semibold text-foreground hidden xl:table-cell">
+                    Pack size
+                  </TableHead>
+                  <TableHead className="text-right font-semibold text-foreground hidden lg:table-cell">
+                    Packs
+                  </TableHead>
+                  <TableHead className="text-right font-semibold text-foreground">Total</TableHead>
                   <TableHead className="text-right font-semibold text-foreground hidden sm:table-cell">Reorder At</TableHead>
                   <TableHead className="text-right font-semibold text-foreground hidden lg:table-cell">Unit Cost</TableHead>
                   <TableHead className="font-semibold text-foreground">Stock Level</TableHead>
@@ -479,7 +567,7 @@ export default function Inventory() {
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 7 }).map((__, j) => (
+                      {Array.from({ length: 9 }).map((__, j) => (
                         <TableCell key={j}>
                           <Skeleton className="w-full h-4" />
                         </TableCell>
@@ -521,9 +609,32 @@ export default function Inventory() {
                           <TableCell className="text-sm text-slate-500 hidden lg:table-cell">
                             {r.tone ?? "—"}
                           </TableCell>
-                          <TableCell className="text-right font-semibold text-foreground">
-                            {r.onHandQty}
-                            {r.trackingUnit}
+                          <TableCell className="text-right text-sm text-slate-600 tabular-nums hidden xl:table-cell">
+                            {r.packSizeValue != null ? (
+                              <>
+                                {r.packSizeValue}
+                                {r.packUnitLabel}
+                              </>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-medium text-foreground tabular-nums hidden lg:table-cell">
+                            {r.packSizeValue != null
+                              ? formatPackCountLine(r.onHandQty, r.packSizeValue)
+                              : "—"}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-foreground tabular-nums">
+                            <span className="block sm:inline">
+                              {r.onHandQty}
+                              {r.trackingUnit}
+                            </span>
+                            {r.packSizeValue != null && (
+                              <span className="block text-xs font-normal text-slate-500 sm:hidden mt-0.5">
+                                {formatPackCountLine(r.onHandQty, r.packSizeValue)} packs × {r.packSizeValue}
+                                {r.packUnitLabel}
+                              </span>
+                            )}
                           </TableCell>
                           <TableCell className="text-right text-sm text-slate-500 hidden sm:table-cell">
                             {r.reorderLevelQty}
@@ -568,7 +679,7 @@ export default function Inventory() {
                     {filtered.length === 0 && (
                       <TableRow>
                         <TableCell
-                          colSpan={7}
+                          colSpan={9}
                           className="text-center text-slate-400 py-12"
                         >
                           {rows.length === 0
@@ -594,7 +705,8 @@ export default function Inventory() {
           <DialogHeader>
             <DialogTitle className="font-display">Add Product to Inventory</DialogTitle>
             <DialogDescription>
-              Select a product from your tenant catalog and set initial stock levels.
+              Stock is stored in grams or milliliters. With a pack size, enter how many packs you
+              have — we calculate the total (e.g. 5 packs × 60g = 300g).
             </DialogDescription>
           </DialogHeader>
 
@@ -615,7 +727,12 @@ export default function Inventory() {
                 <Select
                   value={addProduct.tenantProductId}
                   onValueChange={(v) =>
-                    setAddProduct((p) => ({ ...p, tenantProductId: v }))
+                    setAddProduct((p) => ({
+                      ...p,
+                      tenantProductId: v,
+                      onHandPacks: "0",
+                      onHandDirect: "",
+                    }))
                   }
                 >
                   <SelectTrigger>
@@ -642,31 +759,71 @@ export default function Inventory() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>On Hand Qty</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="0"
-                  value={addProduct.onHandQty}
-                  onChange={(e) =>
-                    setAddProduct((p) => ({ ...p, onHandQty: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Reorder Level</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="120"
-                  value={addProduct.reorderLevelQty}
-                  onChange={(e) =>
-                    setAddProduct((p) => ({ ...p, reorderLevelQty: e.target.value }))
-                  }
-                />
-              </div>
+            {addPack && addPack.value > 0 ? (
+              <>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  <span className="text-slate-500">Pack size</span>{" "}
+                  <span className="font-semibold text-foreground">
+                    {addPack.value}
+                    {unitLabel(addPack.unit)}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>On hand (packs)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0"
+                    value={addProduct.onHandPacks}
+                    onChange={(e) =>
+                      setAddProduct((p) => ({ ...p, onHandPacks: e.target.value }))
+                    }
+                  />
+                  <p className="text-xs text-slate-500">
+                    Total on hand:{" "}
+                    <span className="font-medium text-foreground tabular-nums">
+                      {addPreviewTotal}
+                      {addTu}
+                    </span>{" "}
+                    ({addProduct.onHandPacks.trim() || "0"} × {addPack.value}
+                    {unitLabel(addPack.unit)})
+                  </p>
+                </div>
+              </>
+            ) : (
+              addSelectedTp && (
+                <div className="space-y-1.5">
+                  <Label>On hand ({addTu})</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0"
+                    value={addProduct.onHandDirect}
+                    onChange={(e) =>
+                      setAddProduct((p) => ({ ...p, onHandDirect: e.target.value }))
+                    }
+                  />
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5">
+                    No pack size on this catalog product — enter total weight or volume directly.
+                    Set pack size under Products → catalog if you prefer counting by pack.
+                  </p>
+                </div>
+              )
+            )}
+
+            <div className="space-y-1.5">
+              <Label>Reorder level ({addTu})</Label>
+              <Input
+                type="number"
+                min="0"
+                placeholder="120"
+                value={addProduct.reorderLevelQty}
+                onChange={(e) =>
+                  setAddProduct((p) => ({ ...p, reorderLevelQty: e.target.value }))
+                }
+              />
             </div>
           </div>
 

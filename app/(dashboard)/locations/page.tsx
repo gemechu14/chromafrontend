@@ -6,8 +6,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   MapPin,
   Plus,
-  Pencil,
-  Trash2,
   Clock,
   Home,
   Loader2,
@@ -19,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { TableRowActions } from "@/components/ui/table-row-actions";
 import {
   Dialog,
   DialogContent,
@@ -252,34 +251,16 @@ export default function LocationsPage() {
                     </div>
 
                     {canEdit && (
-                      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 gap-1 text-xs text-slate-500 hover:text-primary"
-                          onClick={() => openEdit(loc)}
-                        >
-                          <Pencil className="w-3 h-3" /> Edit
-                        </Button>
-                        {isAdmin && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 gap-1 text-xs text-slate-500 hover:text-destructive ml-auto"
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  `Delete "${loc.name}"? This cannot be undone and will affect all inventory and users assigned to this location.`
-                                )
-                              ) {
-                                deleteMutation.mutate(loc.id);
-                              }
-                            }}
-                            disabled={deleteMutation.isPending}
-                          >
-                            <Trash2 className="w-3 h-3" /> Delete
-                          </Button>
-                        )}
+                      <div className="flex items-center justify-end mt-4 pt-3 border-t border-slate-100">
+                        <TableRowActions
+                          itemName={loc.name}
+                          onEdit={() => openEdit(loc)}
+                          onDelete={() => deleteMutation.mutate(loc.id)}
+                          confirmTitle={`Delete “${loc.name}”?`}
+                          confirmDescription="This cannot be undone and will affect all inventory and users assigned to this location."
+                          showDelete={isAdmin}
+                          disabled={deleteMutation.isPending}
+                        />
                       </div>
                     )}
                   </CardContent>

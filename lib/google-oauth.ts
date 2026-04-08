@@ -82,7 +82,7 @@ export async function fetchGoogleOAuthStart(): Promise<GoogleOAuthStartResponse>
   } catch (e) {
     if (e instanceof TypeError) {
       throw new GoogleOAuthConfigError(
-        "Could not reach the API. Check the network, CORS, and that NEXT_PUBLIC_API_URL / NEXT_PUBLIC_API_BASE_URL matches your backend (try http://127.0.0.1:8000 if your app uses 127.0.0.1).",
+        "Check the network.",
         "network"
       );
     }

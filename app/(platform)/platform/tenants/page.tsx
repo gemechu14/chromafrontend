@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import { tenantsApi } from "@/lib/api/tenants";
 import { ApiRequestError } from "@/lib/api/client";
 import type { Tenant, TenantPlan, TenantStatus, CreateTenantRequest } from "@/lib/types";
@@ -38,6 +38,7 @@ import {
   PlatformTablePagination,
   PlatformTableWrap,
 } from "@/components/platform/platform-data-table";
+import { TableRowActions } from "@/components/ui/table-row-actions";
 
 export default function PlatformTenantsPage() {
   const queryClient = useQueryClient();
@@ -172,28 +173,17 @@ export default function PlatformTenantsPage() {
                               {t.status}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right space-x-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-slate-600 hover:text-primary"
-                              onClick={() => openEdit(t)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={() => {
-                                if (confirm(`Delete tenant “${t.name}”? This cannot be undone.`)) {
-                                  deleteMutation.mutate(t.id);
-                                }
-                              }}
-                              disabled={deleteMutation.isPending}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end">
+                              <TableRowActions
+                                itemName={t.name}
+                                onEdit={() => openEdit(t)}
+                                onDelete={() => deleteMutation.mutate(t.id)}
+                                confirmTitle={`Delete tenant “${t.name}”?`}
+                                confirmDescription="This cannot be undone."
+                                disabled={deleteMutation.isPending}
+                              />
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))

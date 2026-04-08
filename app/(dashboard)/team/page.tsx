@@ -10,8 +10,6 @@ import {
   ShieldAlert,
   Crown,
   User,
-  Pencil,
-  Trash2,
   ToggleLeft,
   ToggleRight,
   MapPin,
@@ -39,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TableRowActions } from "@/components/ui/table-row-actions";
 import { usersApi } from "@/lib/api/users";
 import { tenantsApi } from "@/lib/api/tenants";
 import { useAuth } from "@/contexts/auth-context";
@@ -380,6 +379,7 @@ export default function TeamPage() {
                     {canEdit && !isCurrentUser && (
                       <div className="flex items-center gap-2 shrink-0">
                         <button
+                          type="button"
                           onClick={() => toggleActiveMutation.mutate(u)}
                           disabled={toggleActiveMutation.isPending}
                           className="text-slate-400 hover:text-primary transition-colors"
@@ -391,31 +391,15 @@ export default function TeamPage() {
                             <ToggleLeft className="w-5 h-5" />
                           )}
                         </button>
-                        <button
-                          onClick={() => openEdit(u)}
-                          className="text-slate-400 hover:text-primary transition-colors"
-                          title="Edit"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        {isAdmin && (
-                          <button
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  `Delete ${u.full_name}? This cannot be undone.`
-                                )
-                              ) {
-                                deleteMutation.mutate(u.id);
-                              }
-                            }}
-                            disabled={deleteMutation.isPending}
-                            className="text-slate-400 hover:text-destructive transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                        <TableRowActions
+                          itemName={u.full_name}
+                          onEdit={() => openEdit(u)}
+                          onDelete={() => deleteMutation.mutate(u.id)}
+                          confirmTitle={`Delete ${u.full_name}?`}
+                          confirmDescription="This cannot be undone."
+                          showDelete={isAdmin}
+                          disabled={deleteMutation.isPending}
+                        />
                       </div>
                     )}
                   </CardContent>

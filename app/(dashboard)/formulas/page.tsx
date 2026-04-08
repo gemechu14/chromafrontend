@@ -24,10 +24,90 @@ import { productsApi } from "@/lib/api/products";
 import { formulasApi } from "@/lib/api/formulas";
 import { inventoryApi } from "@/lib/api/inventory";
 import { useAuth } from "@/contexts/auth-context";
-import type { Formula, TenantProduct } from "@/lib/types";
+import type { Formula, TenantProduct, ProductCategory, ProductLine } from "@/lib/types";
 import { ApiRequestError } from "@/lib/api/client";
-import { mixColors, getProductColor } from "@/lib/utils/color-mixer";
-import { ColorCylinder } from "@/components/formula/ColorCylinder";
+import {
+  mixColors,
+  normalizeCatalogHex,
+  getNonColorLayerColor,
+} from "@/lib/utils/color-mixer";
+import { FormulaDroplet, type DropletItem } from "@/components/formula/FormulaDroplet";
+
+/** Resolve visual properties for a formula item in the droplet preview (API uses `hex_code`). */
+function resolveDropletVisual(
+  gp:
+    | { hex_code: string | null; product_line_id: string }
+    | null
+    | undefined,
+  lineCategory: ProductCategory | undefined
+): {
+  color: string;
+  hex_code: string | null;
+  isColorCategory: boolean;
+  contributesToMix: boolean;
+  categoryLabel: string;
+} {
+  const catLabelFor = (c: ProductCategory | undefined): string => {
+    if (c === undefined) return "Other";
+    if (c === "COLOR") return "Color";
+    if (c === "DEVELOPER") return "Developer";
+    if (c === "TONER") return "Toner";
+    if (c === "TREATMENT") return "Treatment";
+    return String(c);
+  };
+
+  if (!gp) {
+    return {
+      color: "#94a3b8",
+      hex_code: null,
+      isColorCategory: lineCategory === "COLOR",
+      contributesToMix: false,
+      categoryLabel: catLabelFor(lineCategory),
+    };
+  }
+
+  const normHex = normalizeCatalogHex(gp.hex_code);
+
+  // TONER can also carry pigment hex; preview it in the cylinder when hex exists.
+  if (lineCategory === "TONER") {
+    return {
+      color: normHex ?? getNonColorLayerColor("TONER"),
+      hex_code: normHex,
+      isColorCategory: false,
+      contributesToMix: normHex !== null,
+      categoryLabel: catLabelFor(lineCategory),
+    };
+  }
+
+  if (lineCategory === "DEVELOPER" || lineCategory === "TREATMENT") {
+    return {
+      color: getNonColorLayerColor(lineCategory),
+      hex_code: null,
+      isColorCategory: false,
+      contributesToMix: false,
+      categoryLabel: catLabelFor(lineCategory),
+    };
+  }
+
+  if (lineCategory === "COLOR") {
+    return {
+      color: normHex ?? "#94a3b8",
+      hex_code: normHex,
+      isColorCategory: true,
+      contributesToMix: normHex !== null,
+      categoryLabel: "Color",
+    };
+  }
+
+  // Unknown line (not in map) or uncategorized — do not guess COLOR from hex
+  return {
+    color: "#94a3b8",
+    hex_code: null,
+    isColorCategory: false,
+    contributesToMix: false,
+    categoryLabel: catLabelFor(lineCategory),
+  };
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -223,18 +303,52 @@ export default function FormulaBuilder() {
       return { items: allProducts, total: firstPage.total };
     },
   });
+
+  // ── Product lines (per brand) — API uses brand_id; category + name live on the line ──
+  const { data: productLinesData, isLoading: loadingProductLines } = useQuery({
+    queryKey: ["product-lines", "all-by-brand", "formula-builder"],
+    queryFn: async () => {
+      const brandsPage = await productsApi.listBrands(1, 500);
+      const allLines: ProductLine[] = [];
+      for (const b of brandsPage.items) {
+        let page = 1;
+        let totalPages = 1;
+        do {
+          const res = await productsApi.listProductLines(b.id, page, 100);
+          allLines.push(...res.items);
+          totalPages = res.total_pages;
+          page += 1;
+        } while (page <= totalPages);
+      }
+      return { items: allLines };
+    },
+  });
+
+  const lineMetaById: Record<string, { category: ProductCategory; name: string }> = {};
+  productLinesData?.items.forEach((line) => {
+    lineMetaById[line.id] = { category: line.category, name: line.name };
+  });
   
   // Build global product lookup map
-  const globalProductLookup: Record<string, { name: string; code: string; tone_family: string | null }> = {};
+  const globalProductLookup: Record<string, {
+    name: string;
+    code: string;
+    tone_family: string | null;
+    hex_code: string | null;
+    product_line_id: string;
+  }> = {};
   globalProductsPage?.items.forEach((gp) => {
     globalProductLookup[gp.id] = {
       name: gp.name,
       code: gp.code,
       tone_family: gp.tone_family ?? null,
+      hex_code: gp.hex_code ?? null,
+      product_line_id: gp.product_line_id,
     };
   });
 
-  const loadingProducts = loadingTenantProducts || loadingGlobalProducts || loadingInventory;
+  const loadingProducts =
+    loadingTenantProducts || loadingGlobalProducts || loadingInventory || loadingProductLines;
 
   function mixProductLabel(p: TenantProduct): string {
     if (p.custom_name?.trim()) return p.custom_name;
@@ -275,26 +389,52 @@ export default function FormulaBuilder() {
     (sum, item) => sum + (parseFloat(item.amount) || 0),
     0
   );
+  const totalByUnit = mixItems.reduce(
+    (acc, item) => {
+      const amt = parseFloat(item.amount) || 0;
+      if (!item.tenantProductId || amt <= 0) return acc;
+      const tp = tenantProducts.find((p) => p.id === item.tenantProductId);
+      const unit = tp?.tracking_unit?.toUpperCase() === "ML" ? "ml" : "g";
+      acc[unit] += amt;
+      return acc;
+    },
+    { g: 0, ml: 0 }
+  );
 
-  // ── Color mixing calculation ────────────────────────────────────────────────────
+  // ── Droplet items + mixed color (pigment hex only; developers excluded) ─────
+  const dropletItems: DropletItem[] = mixItems
+    .filter((item) => item.tenantProductId && parseFloat(item.amount) > 0)
+    .map((item) => {
+      const tp = tenantProducts.find((p) => p.id === item.tenantProductId);
+      const gp = tp ? globalProductLookup[tp.product_id] : null;
+      const cat = gp ? lineMetaById[gp.product_line_id]?.category : undefined;
+      const productLineName = gp ? lineMetaById[gp.product_line_id]?.name ?? null : null;
+      const v = resolveDropletVisual(gp, cat);
+      return {
+        color: v.color,
+        amount: parseFloat(item.amount) || 0,
+        label: tp ? mixProductLabel(tp) : "Unknown",
+        unitLabel: tp?.tracking_unit?.toUpperCase() === "ML" ? "ml" : "g",
+        hex_code: v.hex_code,
+        isColorCategory: v.isColorCategory,
+        contributesToMix: v.contributesToMix,
+        categoryLabel: v.categoryLabel,
+        product_line_name: productLineName,
+      };
+    });
+
   const mixedColor = (() => {
-    const colorItems = mixItems
-      .filter((item) => item.tenantProductId && parseFloat(item.amount) > 0)
-      .map((item) => {
-        const tp = tenantProducts.find((p) => p.id === item.tenantProductId);
-        if (!tp) return null;
-        
-        const globalProduct = globalProductLookup[tp.product_id];
-        const code = globalProduct?.code || "";
-        const toneFamily = globalProduct?.tone_family || null;
-        const color = getProductColor(code, toneFamily);
-        const amount = parseFloat(item.amount) || 0;
-        
-        return { color, amount };
-      })
-      .filter((item): item is { color: string; amount: number } => item !== null);
+    const parts = dropletItems
+      .filter((d) => d.contributesToMix)
+      .map((d) => ({ color: d.color, amount: d.amount }));
+    return parts.length > 0 ? mixColors(parts) : "#CCCCCC";
+  })();
 
-    return mixColors(colorItems);
+  const formulaUnitLabel = (() => {
+    const first = mixItems.find((i) => i.tenantProductId && parseFloat(i.amount) > 0);
+    if (!first) return "g";
+    const tp = tenantProducts.find((p) => p.id === first.tenantProductId);
+    return tp?.tracking_unit?.toUpperCase() === "ML" ? "ml" : "g";
   })();
 
   // ── Save formula ─────────────────────────────────────────────────────────────
@@ -633,40 +773,50 @@ export default function FormulaBuilder() {
 
         {/* Right Sidebar - Color Preview & History */}
         <div className="space-y-4 lg:sticky lg:top-24 lg:self-start lg:z-10">
-          {/* Real-time Color Preview */}
-          <Card className="shadow-card border-border/60">
+          {/* Color Preview (glass bowl) + product breakdown */}
+          <Card className="shadow-card border-border/60 overflow-hidden">
             <CardHeader>
               <CardTitle className="font-display text-lg flex items-center gap-2">
                 <Eye className="w-4 h-4 text-primary" /> Color Preview
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-center py-6 min-h-[300px]">
-                <ColorCylinder color={mixedColor} totalAmount={totalWeight} />
-              </div>
+            <CardContent className="space-y-3">
+              <FormulaDroplet
+                items={dropletItems}
+                capacity={500}
+                unitLabel={formulaUnitLabel}
+              />
               {totalWeight > 0 && (
-                <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Total Amount:</span>
-                      <span className="font-semibold">{totalWeight.toFixed(1)}g/ml</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Mixed Color:</span>
-                      <span className="font-mono text-xs">{mixedColor.toUpperCase()}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Est. Cost:</span>
-                      <span className="font-semibold text-primary">${totalCost.toFixed(2)}</span>
-                    </div>
+                <div className="space-y-2.5 pt-3 border-t border-border/40">
+                  <div className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="font-medium text-muted-foreground shrink-0">Total Amount:</span>
+                    <span className="font-bold text-foreground tabular-nums text-right">
+                      {totalByUnit.g > 0 && <span>{totalByUnit.g.toFixed(1)}g</span>}
+                      {totalByUnit.g > 0 && totalByUnit.ml > 0 && <span className="mx-1">/</span>}
+                      {totalByUnit.ml > 0 && <span>{totalByUnit.ml.toFixed(1)}ml</span>}
+                      {totalByUnit.g === 0 && totalByUnit.ml === 0 && <span>0.0{formulaUnitLabel}</span>}
+                    </span>
                   </div>
-                </div>
-              )}
-              {totalWeight === 0 && (
-                <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-200 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    Add products to see the mixed color preview
-                  </p>
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="font-medium text-muted-foreground shrink-0">Mixed Color:</span>
+                    <span className="flex items-center gap-2 min-w-0 justify-end">
+                      {mixedColor !== "#CCCCCC" && (
+                        <div
+                          className="w-5 h-5 rounded-full border-2 border-border shrink-0 shadow-sm"
+                          style={{ backgroundColor: mixedColor }}
+                        />
+                      )}
+                      <span className="font-bold font-mono text-foreground tabular-nums tracking-tight truncate">
+                        {mixedColor !== "#CCCCCC" ? mixedColor.toUpperCase() : "—"}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="font-medium text-muted-foreground shrink-0">Est. Cost:</span>
+                    <span className="font-bold text-primary tabular-nums">
+                      ${totalCost.toFixed(2)}
+                    </span>
+                  </div>
                 </div>
               )}
             </CardContent>

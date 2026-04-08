@@ -8,6 +8,7 @@ import type {
   UpdateProductLineRequest,
   Product,
   CreateProductRequest,
+  UpdateProductRequest,
   TenantProduct,
   AddTenantProductRequest,
   UpdateTenantProductRequest,
@@ -106,6 +107,9 @@ export const productsApi = {
   listProducts(params: ListProductsParams = {}): Promise<PaginatedResponse<Product>> {
     const query = buildQuery({
       product_line_id: params.product_line_id,
+      tone_family: params.tone_family,
+      level: params.level,
+      color_family: params.color_family,
       page: params.page ?? 1,
       page_size: params.page_size ?? 100,
     });
@@ -122,7 +126,7 @@ export const productsApi = {
   /**
    * PATCH /products/{product_id}
    */
-  updateProduct(productId: string, data: Partial<CreateProductRequest>): Promise<Product> {
+  updateProduct(productId: string, data: UpdateProductRequest): Promise<Product> {
     return apiClient.patch<Product>(`/products/${productId}`, data);
   },
 
