@@ -35,33 +35,50 @@ interface FormulaDropletProps {
 
 const DEFAULT_CAPACITY = 500;
 
-// ─── Teardrop SVG geometry (matches Vish reference) ─────────────────────────
+// ─── Cylinder/Bowl SVG geometry ──────────────────────────────────────────────
 
 const VB_W = 680;
-const VB_H = 440;
+const VB_H = 500;
 const CX = 340;
-const TIP_Y = 22;
-const CC_Y = 190;
-const R = 150;
-const BOT_Y = CC_Y + R;
-const DROP_INNER_H = BOT_Y - TIP_Y;
+const R = 248;
+const RIM_Y = 126;
+const SHOULDER_Y = 304;
+const SHOULDER_HALF_W = 154;
+const BOT_Y = 380;
+const BOWL_DEPTH = 26;
+const RIM_RISE = 7;
+const BOWL_CONTROL_Y = BOT_Y + BOWL_DEPTH;
+// For a quadratic from shoulder->shoulder, the visible lowest point is at t=0.5.
+const LIQUID_BOTTOM_Y = SHOULDER_Y + (BOWL_CONTROL_Y - SHOULDER_Y) / 2;
+const DROP_INNER_H = LIQUID_BOTTOM_Y - RIM_Y;
 
-const DROP_PATH = [
-  `M ${CX} ${TIP_Y}`,
-  `C ${CX - 4} 90, ${CX + R} ${CC_Y - 50}, ${CX + R} ${CC_Y}`,
-  `A ${R} ${R} 0 0 1 ${CX - R} ${CC_Y}`,
-  `C ${CX - R} ${CC_Y - 50}, ${CX + 4} 90, ${CX} ${TIP_Y}`,
+const CYLINDER_FILL_PATH = [
+  `M ${CX - R} ${RIM_Y}`,
+  `C ${CX - R + 14} ${RIM_Y + 72}, ${CX - SHOULDER_HALF_W - 28} ${SHOULDER_Y - 28}, ${CX - SHOULDER_HALF_W} ${SHOULDER_Y}`,
+  `Q ${CX} ${BOWL_CONTROL_Y}, ${CX + SHOULDER_HALF_W} ${SHOULDER_Y}`,
+  `C ${CX + SHOULDER_HALF_W + 28} ${SHOULDER_Y - 28}, ${CX + R - 14} ${RIM_Y + 72}, ${CX + R} ${RIM_Y}`,
   "Z",
 ].join(" ");
 
+const RIM_BACK_ARC = `M ${CX - R} ${RIM_Y} Q ${CX} ${RIM_Y - RIM_RISE}, ${CX + R} ${RIM_Y}`;
+const RIM_FRONT_ARC = `M ${CX - R} ${RIM_Y} Q ${CX} ${RIM_Y + RIM_RISE}, ${CX + R} ${RIM_Y}`;
+const BOWL_WALL_PATH = [
+  `M ${CX - R} ${RIM_Y}`,
+  `C ${CX - R + 14} ${RIM_Y + 72}, ${CX - SHOULDER_HALF_W - 28} ${SHOULDER_Y - 28}, ${CX - SHOULDER_HALF_W} ${SHOULDER_Y}`,
+  `Q ${CX} ${BOWL_CONTROL_Y}, ${CX + SHOULDER_HALF_W} ${SHOULDER_Y}`,
+  `C ${CX + SHOULDER_HALF_W + 28} ${SHOULDER_Y - 28}, ${CX + R - 14} ${RIM_Y + 72}, ${CX + R} ${RIM_Y}`,
+].join(" ");
+
 function halfWidthAt(y: number): number {
-  if (y <= TIP_Y || y >= BOT_Y) return 0;
-  if (y >= CC_Y) {
-    const dy = y - CC_Y;
-    return Math.sqrt(Math.max(0, R * R - dy * dy));
+  if (y <= RIM_Y || y >= LIQUID_BOTTOM_Y) return 0;
+  if (y <= SHOULDER_Y) {
+    const t = (y - RIM_Y) / (SHOULDER_Y - RIM_Y);
+    const eased = 1 - Math.pow(t, 0.74) * 0.42;
+    return R * eased;
   }
-  const t = (y - TIP_Y) / (CC_Y - TIP_Y);
-  return R * Math.pow(t, 0.52);
+  const denom = BOWL_CONTROL_Y - SHOULDER_Y;
+  const inside = 1 - (2 * (y - SHOULDER_Y)) / denom;
+  return SHOULDER_HALF_W * Math.sqrt(Math.max(0, inside));
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -102,15 +119,18 @@ function wrapText(text: string, max: number): string[] {
 
 // ─── Callout layout constants ────────────────────────────────────────────────
 
-const CALLOUT_R = 26;
-const MIN_GAP = CALLOUT_R * 2 + 26;
-const LABEL_L_X = 72;
-const LABEL_R_X = VB_W - 72;
+const CALLOUT_R = 29;
+const MIN_GAP = CALLOUT_R * 2 + 34;
+const LABEL_L_X = 56;
+const LABEL_R_X = VB_W - 56;
+const LABEL_TOP_BOUND = RIM_Y - 22;
+const LABEL_BOTTOM_BOUND = LIQUID_BOTTOM_Y - 8;
 
 interface Layer extends DropletItem {
   rectY: number;
   rectH: number;
   midY: number;
+  edgeY: number;
   isLeft: boolean;
   edgeX: number;
   labelX: number;
@@ -153,10 +173,13 @@ export function FormulaDroplet({
       return { layers: [] as Layer[], fillRatio: 0 };
 
     const fillRatio = Math.min(1, colorAmount / capacity);
-    const liquidH = fillRatio * DROP_INNER_H;
+    // Visual easing: keep low amounts visible while preserving real quantity text.
+    const visualFillRatio =
+      fillRatio <= 0 ? 0 : Math.max(0.12, Math.min(1, Math.pow(fillRatio, 0.62)));
+    const liquidH = visualFillRatio * DROP_INNER_H;
 
     // Same order as mix rows: oldest first in array → bottom of liquid; newest → tip
-    let cumY = BOT_Y;
+    let cumY = LIQUID_BOTTOM_Y;
     const raw: Layer[] = [];
 
     for (let i = 0; i < previewItems.length; i++) {
@@ -168,6 +191,7 @@ export function FormulaDroplet({
         rectY: cumY,
         rectH: Math.max(h, 1),
         midY: cumY + h / 2,
+        edgeY: 0,
         isLeft: false,
         edgeX: 0,
         labelX: 0,
@@ -176,11 +200,13 @@ export function FormulaDroplet({
     }
 
     raw.forEach((l, i) => {
-      const hw = halfWidthAt(l.midY);
+      // Keep anchor on the actual visible contour while tracking each layer.
+      l.edgeY = Math.max(RIM_Y + 8, Math.min(LIQUID_BOTTOM_Y - 8, l.midY));
+      const hw = halfWidthAt(l.edgeY);
       l.isLeft = i % 2 === 0;
       l.edgeX = l.isLeft ? CX - hw : CX + hw;
       l.labelX = l.isLeft ? LABEL_L_X : LABEL_R_X;
-      l.labelY = Math.max(TIP_Y + CALLOUT_R, Math.min(BOT_Y + 30, l.midY));
+      l.labelY = Math.max(LABEL_TOP_BOUND, Math.min(LABEL_BOTTOM_BOUND, l.midY));
     });
 
     for (const side of [true, false] as const) {
@@ -191,6 +217,13 @@ export function FormulaDroplet({
         const minY = group[i - 1].labelY + MIN_GAP;
         if (group[i].labelY < minY) group[i].labelY = minY;
       }
+      for (let i = group.length - 2; i >= 0; i--) {
+        const maxY = group[i + 1].labelY - MIN_GAP;
+        if (group[i].labelY > maxY) group[i].labelY = maxY;
+      }
+      group.forEach((l) => {
+        l.labelY = Math.max(LABEL_TOP_BOUND, Math.min(LABEL_BOTTOM_BOUND, l.labelY));
+      });
     }
 
     return { layers: raw, fillRatio };
@@ -214,25 +247,37 @@ export function FormulaDroplet({
   return (
     <div className={className}>
       {/* ── Dark canvas with teardrop ─────────────────────────────────── */}
-      <div className="rounded-2xl bg-gradient-to-b from-[#1e2333] via-[#171c2a] to-[#111520] px-2 pt-5 pb-4">
+      <div className="rounded-2xl border border-slate-200/70 bg-gradient-to-b from-slate-50 via-white to-slate-50/70 px-2 pt-5 pb-4 shadow-sm">
         <svg
           viewBox={`0 0 ${VB_W} ${VB_H}`}
           className="w-full"
           preserveAspectRatio="xMidYMid meet"
         >
           <defs>
+            <linearGradient id="bowlGloss" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="rgba(255,255,255,0.24)" />
+              <stop offset="100%" stopColor="rgba(226,232,240,0.05)" />
+            </linearGradient>
             <clipPath id={`drop-${clipId}`}>
-              <path d={DROP_PATH} />
+              <path d={CYLINDER_FILL_PATH} />
             </clipPath>
           </defs>
 
           {/* Ground shadow */}
           <ellipse
             cx={CX}
-            cy={BOT_Y + 20}
-            rx={R * 0.6}
-            ry={8}
-            fill="rgba(0,0,0,0.3)"
+            cy={BOT_Y + 26}
+            rx={R * 0.5}
+            ry={11}
+            fill="rgba(15,23,42,0.12)"
+          />
+
+          {/* Back rim for open-top bowl */}
+          <path
+            d={RIM_BACK_ARC}
+            fill="none"
+            stroke="rgba(148,163,184,0.45)"
+            strokeWidth="2"
           />
 
           {hasLayers ? (
@@ -262,21 +307,16 @@ export function FormulaDroplet({
                       x={CX - hw}
                       y={topY}
                       width={hw * 2}
-                      height={2}
-                      fill="rgba(255,255,255,0.15)"
-                      rx={1}
+                      height={3}
+                      fill="rgba(255,255,255,0.42)"
+                      rx={2}
                     />
                   );
                 })()}
               </g>
 
-              {/* Teardrop glass outline */}
-              <path
-                d={DROP_PATH}
-                fill="none"
-                stroke="rgba(255,255,255,0.14)"
-                strokeWidth="2"
-              />
+              {/* Glass gloss overlay */}
+              <path d={CYLINDER_FILL_PATH} fill="url(#bowlGloss)" />
 
               {/* Callouts */}
               {layers.map((layer, i) => {
@@ -292,15 +332,15 @@ export function FormulaDroplet({
                     transition={{ delay: 0.2 + i * 0.06, duration: 0.3 }}
                   >
                     {/* Dot on edge */}
-                    <circle cx={layer.edgeX} cy={layer.midY} r={3.5} fill="white" />
+                    <circle cx={layer.edgeX} cy={layer.edgeY} r={3.5} fill="white" />
 
                     {/* Leader line */}
                     <line
                       x1={layer.edgeX}
-                      y1={layer.midY}
+                      y1={layer.edgeY}
                       x2={layer.labelX}
                       y2={layer.labelY}
-                      stroke="rgba(255,255,255,0.3)"
+                      stroke="rgba(71,85,105,0.35)"
                       strokeWidth="1.2"
                     />
 
@@ -318,7 +358,7 @@ export function FormulaDroplet({
                       cy={layer.labelY}
                       r={CALLOUT_R - 4}
                       fill="none"
-                      stroke="rgba(255,255,255,0.2)"
+                      stroke="rgba(255,255,255,0.45)"
                       strokeWidth="1"
                     />
 
@@ -330,7 +370,7 @@ export function FormulaDroplet({
                       dominantBaseline="central"
                       fill={fg}
                       fontWeight="700"
-                      fontSize="11.5"
+                      fontSize="12.5"
                       style={{ fontFamily: "Inter, system-ui, sans-serif" }}
                     >
                       {fmt(layer.amount, layer.unitLabel)}
@@ -341,9 +381,9 @@ export function FormulaDroplet({
                       x={layer.labelX}
                       y={layer.labelY + CALLOUT_R + 13}
                       textAnchor="middle"
-                      fill="rgba(255,255,255,0.7)"
-                      fontSize="9"
-                      fontWeight="500"
+                      fill="rgba(51,65,85,0.92)"
+                      fontSize="10"
+                      fontWeight="700"
                       style={{ fontFamily: "Inter, system-ui, sans-serif" }}
                     >
                       {lines.map((line, li) => (
@@ -360,26 +400,32 @@ export function FormulaDroplet({
             <>
               {/* Empty teardrop outline */}
               <path
-                d={DROP_PATH}
+                d={CYLINDER_FILL_PATH}
                 fill="none"
-                stroke="rgba(255,255,255,0.12)"
+                stroke="rgba(148,163,184,0.6)"
                 strokeWidth="2"
                 strokeDasharray="8 5"
               />
+              <path
+                d={RIM_BACK_ARC}
+                fill="none"
+                stroke="rgba(148,163,184,0.55)"
+                strokeWidth="2"
+              />
               <text
                 x={CX}
-                y={CC_Y - 10}
+                y={RIM_Y + 54}
                 textAnchor="middle"
-                fill="rgba(148,163,184,0.45)"
+                fill="rgba(148,163,184,0.65)"
                 fontSize="34"
               >
                 &#x1F9EA;
               </text>
               <text
                 x={CX}
-                y={CC_Y + 22}
+                y={RIM_Y + 86}
                 textAnchor="middle"
-                fill="rgba(148,163,184,0.5)"
+                fill="rgba(100,116,139,0.85)"
                 fontSize="12"
                 fontWeight="500"
                 style={{ fontFamily: "Inter, system-ui, sans-serif" }}
@@ -397,13 +443,28 @@ export function FormulaDroplet({
               x={CX}
               y={BOT_Y + 42}
               textAnchor="middle"
-              fill="rgba(148,163,184,0.4)"
+              fill="rgba(100,116,139,0.8)"
               fontSize="9.5"
               style={{ fontFamily: "Inter, system-ui, sans-serif" }}
             >
               {colorAmount.toFixed(1)} / {capacity} {u} ({Math.round(fillRatio * 100)}%)
             </text>
           )}
+
+          {/* Bowl walls and front rim on top to keep it visually open */}
+          <path
+            d={BOWL_WALL_PATH}
+            fill="none"
+            stroke="rgba(71,85,105,0.35)"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+          <path
+            d={RIM_FRONT_ARC}
+            fill="none"
+            stroke="rgba(71,85,105,0.5)"
+            strokeWidth="2.2"
+          />
         </svg>
       </div>
 
