@@ -95,8 +95,7 @@ export default function PlatformSalonUsersPage() {
       <div>
         <h1 className="font-display text-xl font-bold text-foreground sm:text-2xl">Salon users</h1>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground sm:text-base">
-          Choose a salon to list staff. Super admin requests must include that salon&apos;s{" "}
-          <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">tenant_id</span>.
+          Pick a salon to view its staff.
         </p>
       </div>
 

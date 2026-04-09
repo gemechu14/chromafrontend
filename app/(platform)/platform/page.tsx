@@ -241,23 +241,23 @@ export default function PlatformDashboardPage() {
         </motion.div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:items-stretch">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
-          className="lg:col-span-2"
+          className="lg:col-span-2 flex flex-col min-h-0 h-full"
         >
-          <Card className="border border-slate-200 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="border border-slate-200 shadow-sm flex flex-col h-full min-h-0">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 shrink-0">
               <CardTitle className="font-display text-base font-semibold text-foreground">
                 New salon tenants
               </CardTitle>
               <span className="text-xs text-slate-400">Last 6 months</span>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col min-h-0">
               {loadingTenants ? (
-                <Skeleton className="w-full h-44" />
+                <Skeleton className="w-full h-44 shrink-0" />
               ) : (
                 <ResponsiveContainer width="100%" height={176}>
                   <AreaChart data={tenantGrowth}>
@@ -301,7 +301,7 @@ export default function PlatformDashboardPage() {
                 </ResponsiveContainer>
               )}
               {!loadingTenants && allTenants.length === 0 && (
-                <div className="flex items-center justify-center h-44 text-slate-400 text-sm">
+                <div className="flex items-center justify-center h-44 shrink-0 text-slate-400 text-sm">
                   No tenants yet
                 </div>
               )}
@@ -313,65 +313,73 @@ export default function PlatformDashboardPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.32 }}
+          className="flex flex-col min-h-0 h-full"
         >
-          <Card className="border border-slate-200 shadow-sm">
-            <CardHeader className="pb-2">
+          <Card className="border border-slate-200 shadow-sm flex flex-col h-full min-h-0">
+            <CardHeader className="pb-2 shrink-0">
               <CardTitle className="font-display text-base font-semibold text-foreground">
                 Brands by product lines
               </CardTitle>
               <p className="text-xs text-slate-400">First five brands, ranked by lines</p>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="flex-1 flex flex-col min-h-0">
               {loadingBrandsList ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <Skeleton className="w-5 h-4" />
-                    <div className="flex-1 space-y-1">
-                      <Skeleton className="w-full h-3" />
-                      <Skeleton className="w-full h-1.5" />
+                <div className="space-y-3 w-full">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <Skeleton className="w-5 h-4" />
+                      <div className="flex-1 space-y-1">
+                        <Skeleton className="w-full h-3" />
+                        <Skeleton className="w-full h-1.5" />
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               ) : topBrandsByLines.length === 0 ? (
-                <p className="text-sm text-slate-400">Add brands in Global catalog</p>
+                <div className="flex flex-1 flex-col items-center justify-center text-center px-2 min-h-0">
+                  <p className="text-sm text-slate-400">Add brands in Global catalog</p>
+                </div>
               ) : (
-                topBrandsByLines.map((row, i) => (
-                  <div key={row.name} className="flex items-center gap-3">
-                    <span className="w-5 text-xs font-bold text-slate-400">#{i + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-semibold text-foreground truncate">
-                          {row.name}
-                        </span>
-                        <span className="text-xs text-slate-400 ml-2 shrink-0">{row.lines} lines</span>
-                      </div>
-                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary rounded-full"
-                          style={{
-                            width: `${(row.lines / maxLines) * 100}%`,
-                          }}
-                        />
+                <div className="space-y-3 w-full">
+                  {topBrandsByLines.map((row, i) => (
+                    <div key={row.name} className="flex items-center gap-3">
+                      <span className="w-5 text-xs font-bold text-slate-400">#{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-semibold text-foreground truncate">
+                            {row.name}
+                          </span>
+                          <span className="text-xs text-slate-400 ml-2 shrink-0">{row.lines} lines</span>
+                        </div>
+                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary rounded-full"
+                            style={{
+                              width: `${(row.lines / maxLines) * 100}%`,
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
         </motion.div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:items-stretch">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.38 }}
+          className="flex flex-col min-h-0 h-full"
         >
-          <Card className="border border-slate-200 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="border border-slate-200 shadow-sm flex flex-col h-full min-h-0">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 shrink-0">
               <CardTitle className="font-display text-base font-semibold text-foreground flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <AlertTriangle className="w-4 h-4 text-warning" />
                 Tenants needing attention
               </CardTitle>
               <Link href="/platform/tenants">
@@ -380,28 +388,34 @@ export default function PlatformDashboardPage() {
                 </Button>
               </Link>
             </CardHeader>
-            <CardContent className="space-y-2.5">
+            <CardContent className="flex-1 flex flex-col min-h-0">
               {loadingTenants ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="w-full h-14 rounded-lg" />
-                ))
+                <div className="space-y-2.5 w-full">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="w-full h-14 rounded-lg" />
+                  ))}
+                </div>
               ) : attentionTenants.length === 0 ? (
-                <p className="text-slate-500 text-sm py-2">No trial or suspended salons right now ✓</p>
+                <div className="flex flex-1 flex-col items-center justify-center text-center px-2 min-h-0">
+                  <p className="text-muted-foreground text-sm">No trial or suspended salons right now ✓</p>
+                </div>
               ) : (
-                attentionTenants.slice(0, 5).map((t) => (
-                  <div
-                    key={t.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-amber-50 border border-amber-100"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{t.name}</p>
-                      <p className="text-xs text-slate-500 capitalize">{t.plan} plan</p>
+                <div className="space-y-2.5 w-full">
+                  {attentionTenants.slice(0, 5).map((t) => (
+                    <div
+                      key={t.id}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border border-l-[3px] border-l-warning bg-background p-3 transition-colors hover:bg-muted/50"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{t.name}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{t.plan} plan</p>
+                      </div>
+                      <Badge variant="secondary" className="text-xs capitalize">
+                        {t.status}
+                      </Badge>
                     </div>
-                    <Badge variant="secondary" className="text-xs capitalize">
-                      {t.status}
-                    </Badge>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -411,9 +425,10 @@ export default function PlatformDashboardPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.44 }}
+          className="flex flex-col min-h-0 h-full"
         >
-          <Card className="border border-slate-200 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="border border-slate-200 shadow-sm flex flex-col h-full min-h-0">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 shrink-0">
               <CardTitle className="font-display text-base font-semibold text-foreground">
                 Recent salons
               </CardTitle>
@@ -423,38 +438,44 @@ export default function PlatformDashboardPage() {
                 </Button>
               </Link>
             </CardHeader>
-            <CardContent className="space-y-2.5">
+            <CardContent className="flex-1 flex flex-col min-h-0">
               {loadingTenants ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="w-full h-14 rounded-lg" />
-                ))
+                <div className="space-y-2.5 w-full">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="w-full h-14 rounded-lg" />
+                  ))}
+                </div>
               ) : recentSalons.length === 0 ? (
-                <p className="text-slate-500 text-sm py-2">No salons yet</p>
+                <div className="flex flex-1 flex-col items-center justify-center text-center px-2 min-h-0">
+                  <p className="text-slate-500 text-sm">No salons yet</p>
+                </div>
               ) : (
-                recentSalons.map((t) => (
-                  <div
-                    key={t.id}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 transition-colors border border-slate-100"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center shrink-0">
-                        <Building2 className="w-3.5 h-3.5 text-sky-700" />
+                <div className="space-y-2.5 w-full">
+                  {recentSalons.map((t) => (
+                    <div
+                      key={t.id}
+                      className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 transition-colors border border-slate-100"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center shrink-0">
+                          <Building2 className="w-3.5 h-3.5 text-sky-700" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{t.name}</p>
+                          <p className="text-xs text-slate-500 capitalize">
+                            {t.plan} · {t.status}
+                          </p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-foreground truncate">{t.name}</p>
-                        <p className="text-xs text-slate-500 capitalize">
-                          {t.plan} · {t.status}
-                        </p>
-                      </div>
+                      <p className="text-xs text-slate-400 shrink-0">
+                        {new Date(t.created_at).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </p>
                     </div>
-                    <p className="text-xs text-slate-400 shrink-0">
-                      {new Date(t.created_at).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </p>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>

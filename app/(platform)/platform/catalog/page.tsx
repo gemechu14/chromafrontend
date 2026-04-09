@@ -439,6 +439,8 @@ function ProductsPanel() {
   const prodTotalPages = productsPage?.total_pages ?? 1;
   const selectedLine = lines.find((l) => l.id === lineId);
   const showColor = isColorCategory(selectedLine?.category);
+  const hexFormatOk = /^#[0-9A-Fa-f]{6}$/.test(hexCode.trim());
+  const hexValid = !showColor || hexFormatOk;
 
   function resetForm() {
     setCode(""); setPname(""); setPackVal("60"); setPackUnit("G");
@@ -460,7 +462,7 @@ function ProductsPanel() {
         tone_family: showColor && toneFamily ? (toneFamily as ToneFamilyCode) : null,
         level: showColor && level ? parseInt(level, 10) : null,
         color_family: showColor && colorFamily ? (colorFamily as ColorFamily) : null,
-        hex_code: showColor && hexCode ? hexCode : null,
+        hex_code: showColor ? hexCode.trim() : null,
         is_active: true,
       };
       return productsApi.createProduct(body);
@@ -478,7 +480,7 @@ function ProductsPanel() {
         tone_family: showColor && toneFamily ? (toneFamily as ToneFamilyCode) : null,
         level: showColor && level ? parseInt(level, 10) : null,
         color_family: showColor && colorFamily ? (colorFamily as ColorFamily) : null,
-        hex_code: showColor && hexCode ? hexCode : null,
+        hex_code: showColor ? hexCode.trim() : null,
       };
       return productsApi.updateProduct(editing.id, body);
     },
@@ -536,11 +538,16 @@ function ProductsPanel() {
         </div>
       </div>
       <div className="space-y-2">
-        <Label>Hex color (optional)</Label>
+        <Label>
+          Choose Color{" "}
+          <span className="text-destructive" aria-hidden>
+            *
+          </span>
+        </Label>
         <div className="flex items-center gap-2 flex-wrap">
           <input
             type="color"
-            aria-label="Pick hex color"
+            aria-label="Pick color"
             className="h-9 w-12 cursor-pointer shrink-0 rounded-md border border-input bg-background p-0.5"
             value={hexForColorPickerValue(hexCode)}
             onChange={(e) => setHexCode(e.target.value)}
@@ -550,12 +557,17 @@ function ProductsPanel() {
             onChange={(e) => setHexCode(e.target.value)}
             placeholder="#A52B1F"
             maxLength={7}
+            required={showColor}
+            aria-invalid={showColor && hexCode.trim() !== "" && !hexFormatOk}
             className="min-w-[6.5rem] flex-1 font-mono text-sm"
           />
           {hexCode && /^#[0-9A-Fa-f]{6}$/.test(hexCode) && (
             <span className="h-8 w-8 rounded border border-slate-200 shrink-0" style={{ backgroundColor: hexCode }} aria-hidden />
           )}
         </div>
+        {showColor && hexCode.trim() !== "" && !hexFormatOk && (
+          <p className="text-xs text-destructive">Use a valid hex value like #A52B1F.</p>
+        )}
       </div>
     </>
   );
@@ -694,7 +706,10 @@ function ProductsPanel() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={() => createMut.mutate()} disabled={!code.trim() || !pname.trim() || createMut.isPending}>
+            <Button
+              onClick={() => createMut.mutate()}
+              disabled={!code.trim() || !pname.trim() || !hexValid || createMut.isPending}
+            >
               {createMut.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Create
             </Button>
           </DialogFooter>
@@ -728,7 +743,10 @@ function ProductsPanel() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setEditing(null); resetForm(); }}>Cancel</Button>
-            <Button onClick={() => updateMut.mutate()} disabled={!code.trim() || !pname.trim() || updateMut.isPending}>
+            <Button
+              onClick={() => updateMut.mutate()}
+              disabled={!code.trim() || !pname.trim() || !hexValid || updateMut.isPending}
+            >
               {updateMut.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save
             </Button>
           </DialogFooter>
